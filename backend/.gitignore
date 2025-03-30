@@ -1,0 +1,17 @@
+# python
+__pycache__/
+*.py[cod]
+*.sqlite3
+
+# venv
+.venv/
+
+# IDE's
+.vscode/
+.idea/
+
+# logs
+*.log
+
+# env's
+.env
