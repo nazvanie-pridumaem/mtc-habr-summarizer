@@ -5,3 +5,11 @@ services:
     ports:
       - "3000:80"
     container_name: mtchabrsummarizer-frontend
+
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    container_name: mtchabrsummarizer-backend
