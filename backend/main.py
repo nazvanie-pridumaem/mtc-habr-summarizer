@@ -1,12 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
-from parser import parse_article
-from models import ArticleRequest
+from src.parser import parse_article
 
 app = FastAPI()
-
 
 @app.get("/")
 async def read_root():
