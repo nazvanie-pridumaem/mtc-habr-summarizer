@@ -1,14 +1,23 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, JSONResponse
 
-router = APIRouter()
-
-@router.get("/")
-def read_root():
-    return {"message": "Hello from FastAPI backend!"}
+from parser import parse_article
+from models import ArticleRequest
 
 app = FastAPI()
-app.include_router(router)
+
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello from FastAPI backend!"}
+
+@app.post("/summarize")
+async def summarize(url: str, description="Суммаризировать статью через этот эндпоинт"):
+    response = parse_article(url)
+
+    return JSONResponse(content=response, status_code=200)
+
 
 app.add_middleware(
     CORSMiddleware,
