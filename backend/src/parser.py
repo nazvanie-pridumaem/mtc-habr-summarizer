@@ -75,4 +75,5 @@ def parse_article(url):
     except Exception as e:
         return None
 
+
     return data
