@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+import json
+import asyncio
+from typing import AsyncGenerator
 
 from src.parser import parse_article
-from pydantic import BaseModel
+from src.summarizator import process_article, process_article_streaming
 
 app = FastAPI()
 
@@ -16,14 +19,50 @@ async def read_root():
     return {"message": "Hello from FastAPI backend!"}
 
 @app.post("/summarize")
-async def summarize(link: Link):
-    response = parse_article(link.link)
-
-    if response:
-        return JSONResponse(content=response, status_code=200)
-    else:
-        return JSONResponse(content=response, status_code=400)
-
+async def summarize_stream(link: Link):
+    """Эндпоинт для потоковой суммаризации"""
+    try:
+        # Получаем контент статьи
+        response = parse_article(link.link)
+        
+        if not response or 'text_content' not in response:
+            async def error_stream():
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Не удалось получить контент статьи'})}\n\n"
+            
+            return StreamingResponse(
+                error_stream(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream",
+                }
+            )
+        
+        # Возвращаем поток
+        return StreamingResponse(
+            process_article_streaming(response["text_content"]),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+        
+    except Exception as e:
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(
+            error_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
 
 app.add_middleware(
     CORSMiddleware,
