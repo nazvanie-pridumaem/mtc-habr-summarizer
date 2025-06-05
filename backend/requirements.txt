@@ -3,3 +3,6 @@ uvicorn[standard]
 requests
 urllib3
 beautifulsoup4
+transformers>=4.20.0
+torch>=1.9.0
+SentencePiece
