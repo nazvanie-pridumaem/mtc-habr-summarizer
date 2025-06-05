@@ -7,7 +7,7 @@ import asyncio
 from typing import AsyncGenerator
 
 from src.parser import parse_article
-from src.summarizator import process_article, process_article_streaming
+from src.summarizator import process_article_streaming
 
 app = FastAPI()
 
