@@ -8,7 +8,10 @@ from typing import AsyncGenerator
 
 from src.parser import parse_article
 from src.summarizator import process_article_streaming
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 app = FastAPI()
 
 class Link(BaseModel):
@@ -16,7 +19,7 @@ class Link(BaseModel):
 
 @app.get("/")
 async def read_root():
-    return {"message": "Hello from FastAPI backend!"}
+    return {"message": "Hello from FastAPI bckend!"}
 
 @app.post("/summarize")
 async def summarize_stream(link: Link):
@@ -66,7 +69,7 @@ async def summarize_stream(link: Link):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
