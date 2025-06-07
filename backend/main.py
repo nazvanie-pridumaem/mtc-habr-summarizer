@@ -42,9 +42,21 @@ async def summarize_stream(link: Link):
                 }
             )
         
+        async def enhanced_stream():
+            # Сначала отправляем метаданные
+            metadata = {
+                'type': 'metadata',
+                'title': response.get('title', 'Без названия')
+            }
+            yield f"data: {json.dumps(metadata)}\n\n"
+            
+            # Затем передаем управление основному потоку обработки
+            async for chunk in process_article_streaming(response["text_content"]):
+                yield chunk
+        
         # Возвращаем поток
         return StreamingResponse(
-            process_article_streaming(response["text_content"]),
+            enhanced_stream(),
             media_type="text/plain",
             headers={
                 "Cache-Control": "no-cache",
