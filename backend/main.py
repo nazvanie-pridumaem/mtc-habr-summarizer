@@ -1,15 +1,17 @@
+import asyncio
+import json
+import os
+from typing import AsyncGenerator
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-import json
-import asyncio
-from typing import AsyncGenerator
 
+from src.normalize_url import normalize_habr_url
 from src.parser import parse_article
 from src.summarizator import process_article_streaming
-from dotenv import load_dotenv
-import os
 
 load_dotenv()
 app = FastAPI()
@@ -19,14 +21,16 @@ class Link(BaseModel):
 
 @app.get("/")
 async def read_root():
-    return {"message": "Hello from FastAPI bckend!"}
+    return {"message": "Hello from FastAPI backend!"}
 
 @app.post("/summarize")
 async def summarize_stream(link: Link):
     """Эндпоинт для потоковой суммаризации"""
     try:
+        # Нормализуем URL
+        normalized_url = normalize_habr_url(link.link)    
         # Получаем контент статьи
-        response = parse_article(link.link)
+        response = parse_article(normalized_url)  # Исправлена опечатка
         
         if not response or 'text_content' not in response:
             async def error_stream():
@@ -48,7 +52,7 @@ async def summarize_stream(link: Link):
                 'type': 'metadata',
                 'title': response.get('title', 'Без названия')
             }
-            yield f"data: {json.dumps(metadata)}\n\n"
+            yield f"data: {json.dumps(metadata, ensure_ascii=False)}\n\n"
             
             # Затем передаем управление основному потоку обработки
             async for chunk in process_article_streaming(response["text_content"]):
@@ -66,8 +70,10 @@ async def summarize_stream(link: Link):
         )
         
     except Exception as e:
+        error_message = str(e)
+        
         async def error_stream():
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': error_message}, ensure_ascii=False)}\n\n"
         
         return StreamingResponse(
             error_stream(),
