@@ -6,13 +6,14 @@ interface Section {
 }
 
 interface StreamData {
-    type: 'start' | 'processing' | 'section_complete' | 'complete' | 'error';
+    type: 'start' | 'processing' | 'section_complete' | 'complete' | 'error' | 'metadata';
     total_sections?: number;
     header?: string;
     section_index?: number;
     section?: Section;
     result?: Section[];
     message?: string;
+    title?: string;
 }
 
 function LinkForm() {
@@ -23,9 +24,12 @@ function LinkForm() {
     const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
     const [processedSections, setProcessedSections] = useState<(Section | null)[]>([]);
     const [totalSections, setTotalSections] = useState(0);
+    const [articleTitle, setArticleTitle] = useState<string | null>(null);
 
     const handleSubmit = async () => {
         if (!link.trim()) return;
+
+        console.log('Starting submission with link:', link);
 
         setLoading(true);
         setError('');
@@ -33,8 +37,11 @@ function LinkForm() {
         setProcessedSections([]);
         setStreamingStatus(null);
         setTotalSections(0);
+        setArticleTitle(null);
 
         try {
+            console.log('Sending request to:', 'http://localhost:8000/summarize');
+
             const response = await fetch('http://localhost:8000/summarize', {
                 method: 'POST',
                 headers: {
@@ -43,8 +50,13 @@ function LinkForm() {
                 body: JSON.stringify({ link: link })
             });
 
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                const errorText = await response.text();
+                console.error('Response error:', errorText);
+                throw new Error(`Network response was not ok: ${response.status} ${errorText}`);
             }
 
             if (!response.body) {
@@ -89,6 +101,12 @@ function LinkForm() {
                             console.log('Received event:', data.type, data);
 
                             switch (data.type) {
+                                case 'metadata':
+                                    if (data.title) {
+                                        setArticleTitle(data.title);
+                                    }
+                                    break;
+
                                 case 'start':
                                     if (data.total_sections !== undefined) {
                                         setTotalSections(data.total_sections);
@@ -154,7 +172,14 @@ function LinkForm() {
                     console.error('Error processing buffered data:', e);
                 }
             }
+
+            // Если поток завершился, но loading всё ещё true, сбрасываем его
+            if (loading) {
+                console.log('Stream ended but loading still true, resetting...');
+                setLoading(false);
+            }
         } catch (err) {
+            console.error('Fetch error:', err);
             setError('Ошибка при обработке ссылки. Проверьте URL и попробуйте снова.');
             console.error('Error:', err);
             setLoading(false);
@@ -172,8 +197,59 @@ function LinkForm() {
         return <p className="leading-relaxed">{content}</p>;
     };
 
+    // Функция для подсчета символов в резюме
+    const countCharacters = (sections: Section[]) => {
+        return sections.reduce((total, section) => {
+            let sectionChars = 0;
+            if (section.header) {
+                sectionChars += section.header.length;
+            }
+            if (Array.isArray(section.content)) {
+                sectionChars += section.content.join('').length;
+            } else if (typeof section.content === 'string') {
+                sectionChars += section.content.length;
+            }
+            return total + sectionChars;
+        }, 0);
+    };
+
+    // Функция для расчета времени чтения
+    // Средняя скорость чтения: 200-250 слов в минуту
+    // Среднее количество символов в слове в русском языке: ~6-7
+    const calculateReadingTime = (characters: number) => {
+        const averageCharsPerWord = 6.5;
+        const wordsPerMinute = 225;
+        const words = characters / averageCharsPerWord;
+        const minutes = Math.ceil(words / wordsPerMinute);
+
+        if (minutes === 1) {
+            return '1 минута';
+        } else if (minutes < 5) {
+            return `${minutes} минуты`;
+        } else {
+            return `${minutes} минут`;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+            <style>{`
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                .animate-fadeIn {
+                    animation: fadeIn 0.5s ease-out forwards;
+                }
+            `}</style>
+
             <div className="max-w-4xl mx-auto">
                 {/* Header */}
                 <div className="text-center mb-8">
@@ -193,6 +269,11 @@ function LinkForm() {
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="https://habr.com/"
                                 onChange={(e) => setLink(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && !loading && link.trim()) {
+                                        handleSubmit();
+                                    }
+                                }}
                                 disabled={loading}
                             />
                         </div>
@@ -218,6 +299,27 @@ function LinkForm() {
                         </div>
                     )}
                 </div>
+
+                {/* Article Metadata */}
+                {(articleTitle || summary) && (
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                        <div className="space-y-3">
+                            {articleTitle && (
+                                <h2 className="text-2xl font-bold text-gray-800">
+                                    {articleTitle}
+                                </h2>
+                            )}
+                            {summary && (
+                                <div className="flex items-center text-gray-600">
+                                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Время чтения: {calculateReadingTime(countCharacters(summary))}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Streaming Status */}
                 {loading && (
@@ -323,10 +425,7 @@ function LinkForm() {
                         <div className="bg-gray-50 px-6 py-4 border-t">
                             <div className="flex items-center justify-between text-sm text-gray-600">
                                 <span>
-                                    Разделов: {summary.filter(s => s.header).length}
-                                </span>
-                                <span>
-                                    Всего блоков: {summary.length}
+                                    Количество символов: {countCharacters(summary).toLocaleString('ru-RU')}
                                 </span>
                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
                                     ✓ Обработка завершена
@@ -350,24 +449,6 @@ function LinkForm() {
                     </div>
                 )}
             </div>
-
-            {/* CSS для анимаций */}
-            <style>{`
-                @keyframes fadeIn {
-                    from {
-                        opacity: 0;
-                        transform: translateY(20px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-                
-                .animate-fadeIn {
-                    animation: fadeIn 0.5s ease-out forwards;
-                }
-            `}</style>
         </div>
     );
 }
