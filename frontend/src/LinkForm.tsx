@@ -1,4 +1,5 @@
 import { useState } from "react";
+import RateArticle from "./RateArticle";
 
 interface Section {
     header?: string;
@@ -25,6 +26,7 @@ function LinkForm() {
     const [processedSections, setProcessedSections] = useState<(Section | null)[]>([]);
     const [totalSections, setTotalSections] = useState(0);
     const [articleTitle, setArticleTitle] = useState<string | null>(null);
+    const [showRating, setShowRating] = useState(false);
 
     const handleSubmit = async () => {
         if (!link.trim()) return;
@@ -38,6 +40,7 @@ function LinkForm() {
         setStreamingStatus(null);
         setTotalSections(0);
         setArticleTitle(null);
+        setShowRating(false);
 
         try {
             console.log('Sending request to:', 'http://localhost:8000/summarize');
@@ -75,13 +78,8 @@ function LinkForm() {
                     break;
                 }
 
-                // Декодируем chunk и добавляем к буферу
                 buffer += decoder.decode(value, { stream: true });
-
-                // Разбиваем по строкам
                 const lines = buffer.split('\n');
-
-                // Оставляем последнюю (возможно неполную) строку в буфере
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
@@ -91,7 +89,6 @@ function LinkForm() {
                         try {
                             const jsonStr = line.substring(6);
 
-                            // Пропускаем служебное сообщение [DONE]
                             if (jsonStr === '[DONE]') {
                                 console.log('Received [DONE] signal');
                                 continue;
@@ -133,6 +130,7 @@ function LinkForm() {
                                     console.log('Processing complete, setting summary');
                                     if (data.result) {
                                         setSummary(data.result);
+                                        setShowRating(true);
                                     }
                                     setStreamingStatus('Готово!');
                                     setLoading(false);
@@ -154,7 +152,6 @@ function LinkForm() {
                 }
             }
 
-            // Обработка оставшихся данных в буфере
             if (buffer.trim() && buffer.startsWith('data: ')) {
                 try {
                     const jsonStr = buffer.substring(6);
@@ -164,6 +161,7 @@ function LinkForm() {
 
                         if (data.type === 'complete' && data.result) {
                             setSummary(data.result);
+                            setShowRating(true);
                             setStreamingStatus('Готово!');
                             setLoading(false);
                         }
@@ -173,7 +171,6 @@ function LinkForm() {
                 }
             }
 
-            // Если поток завершился, но loading всё ещё true, сбрасываем его
             if (loading) {
                 console.log('Stream ended but loading still true, resetting...');
                 setLoading(false);
@@ -197,7 +194,6 @@ function LinkForm() {
         return <p className="leading-relaxed">{content}</p>;
     };
 
-    // Функция для подсчета символов в резюме
     const countCharacters = (sections: Section[]) => {
         return sections.reduce((total, section) => {
             let sectionChars = 0;
@@ -213,9 +209,6 @@ function LinkForm() {
         }, 0);
     };
 
-    // Функция для расчета времени чтения
-    // Средняя скорость чтения: 200-250 слов в минуту
-    // Среднее количество символов в слове в русском языке: ~6-7
     const calculateReadingTime = (characters: number) => {
         const averageCharsPerWord = 6.5;
         const wordsPerMinute = 225;
@@ -229,6 +222,20 @@ function LinkForm() {
         } else {
             return `${minutes} минут`;
         }
+    };
+
+    const getSummaryText = () => {
+        if (!summary) return '';
+        
+        return summary.map(section => {
+            let text = section.header ? `${section.header}\n` : '';
+            if (Array.isArray(section.content)) {
+                text += section.content.join('\n');
+            } else {
+                text += section.content;
+            }
+            return text;
+        }).join('\n\n');
     };
 
     return (
@@ -251,10 +258,6 @@ function LinkForm() {
             `}</style>
 
             <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="text-center mb-8">
-                </div>
-
                 {/* Form */}
                 <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
                     <div className="space-y-4">
@@ -388,7 +391,7 @@ function LinkForm() {
 
                 {/* Final Summary Display */}
                 {summary && (
-                    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
                         <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-4">
                             <h2 className="text-2xl font-bold text-white flex items-center">
                                 Резюме статьи
@@ -432,6 +435,19 @@ function LinkForm() {
                                 </span>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Rating Component */}
+                {showRating && summary && (
+                    <div className="mb-8">
+                        <RateArticle 
+                            articleUrl={link}
+                            summarizedText={getSummaryText()}
+                            onRatingSubmitted={() => {
+                                console.log('Rating submitted successfully');
+                            }}
+                        />
                     </div>
                 )}
 
