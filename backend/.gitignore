@@ -15,3 +15,6 @@ __pycache__/
 
 # env's
 .env
+
+# db
+*.db
