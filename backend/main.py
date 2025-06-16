@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -13,6 +13,7 @@ from src.normalize_url import normalize_habr_url
 from src.parser import parse_article
 from src.summarizator import process_article_streaming
 from src.models import get_db, ArticleRating
+from src.comment_analyzer import comment_analyzer
 
 load_dotenv()
 app = FastAPI()
@@ -56,13 +57,28 @@ async def summarize_stream(link: Link):
             # Сначала отправляем метаданные
             metadata = {
                 'type': 'metadata',
-                'title': response.get('title', 'Без названия')
+                'title': response.get('title', 'Без названия'),
+                'url': normalized_url
             }
             yield f"data: {json.dumps(metadata, ensure_ascii=False)}\n\n"
             
             # Затем передаем управление основному потоку обработки
             async for chunk in process_article_streaming(response["text_content"]):
                 yield chunk
+            
+            # После завершения суммаризации анализируем комментарии
+            if 'comments' in response and response['comments']:
+                yield f"data: {json.dumps({'type': 'analyzing_comments'}, ensure_ascii=False)}\n\n"
+                
+                try:
+                    # Анализируем комментарии
+                    comments_analysis = comment_analyzer.process_comments(response['comments'])
+                    
+                    # Отправляем результат анализа комментариев
+                    yield f"data: {json.dumps({'type': 'comments_analysis', 'analysis': comments_analysis}, ensure_ascii=False)}\n\n"
+                    
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'comments_error', 'message': f'Ошибка анализа комментариев: {str(e)}'}, ensure_ascii=False)}\n\n"
         
         # Возвращаем поток
         return StreamingResponse(
@@ -142,7 +158,7 @@ async def get_ratings_stats(db: Session = Depends(get_db)):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
