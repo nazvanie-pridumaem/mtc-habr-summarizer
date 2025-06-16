@@ -8,8 +8,8 @@ from bs4 import BeautifulSoup
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 
 # Загрузка токенизатора и модели
-model = T5ForConditionalGeneration.from_pretrained("denisnaenko/t5_habr_summarizer", trust_remote_code=False)
-tokenizer = T5Tokenizer.from_pretrained("denisnaenko/t5_habr_summarizer", trust_remote_code=False)
+model = T5ForConditionalGeneration.from_pretrained("ghostbim21/ru_text_summary", trust_remote_code=False)
+tokenizer = T5Tokenizer.from_pretrained("ghostbim21/ru_text_summary", trust_remote_code=False)
 
 # Определяем устройство (GPU если доступен)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
