@@ -1,13 +1,22 @@
 import { useState } from "react";
 import RateArticle from "./RateArticle";
+import CommentsAnalysis from "./CommentsAnalysis";
 
 interface Section {
     header?: string;
     content: string | string[];
 }
 
+interface CommentsAnalysisData {
+    total_comments: number;
+    sentiment_stats: Record<string, { count: number; percentage: number }>;
+    examples: Record<string, Array<{ author: string; text: string }>>;
+    success: boolean;
+    error?: string;
+}
+
 interface StreamData {
-    type: 'start' | 'processing' | 'section_complete' | 'complete' | 'error' | 'metadata';
+    type: 'start' | 'processing' | 'section_complete' | 'complete' | 'error' | 'metadata' | 'analyzing_comments' | 'comments_analysis' | 'comments_error';
     total_sections?: number;
     header?: string;
     section_index?: number;
@@ -15,6 +24,7 @@ interface StreamData {
     result?: Section[];
     message?: string;
     title?: string;
+    analysis?: CommentsAnalysisData;
 }
 
 function LinkForm() {
@@ -27,6 +37,8 @@ function LinkForm() {
     const [totalSections, setTotalSections] = useState(0);
     const [articleTitle, setArticleTitle] = useState<string | null>(null);
     const [showRating, setShowRating] = useState(false);
+    const [commentsAnalysis, setCommentsAnalysis] = useState<CommentsAnalysisData | null>(null);
+    const [analyzingComments, setAnalyzingComments] = useState(false);
 
     const handleSubmit = async () => {
         if (!link.trim()) return;
@@ -41,6 +53,8 @@ function LinkForm() {
         setTotalSections(0);
         setArticleTitle(null);
         setShowRating(false);
+        setCommentsAnalysis(null);
+        setAnalyzingComments(false);
 
         try {
             console.log('Sending request to:', 'http://localhost:8000/summarize');
@@ -136,10 +150,30 @@ function LinkForm() {
                                     setLoading(false);
                                     break;
 
+                                case 'analyzing_comments':
+                                    setAnalyzingComments(true);
+                                    setStreamingStatus('Анализируем комментарии...');
+                                    break;
+
+                                case 'comments_analysis':
+                                    console.log('Received comments analysis:', data.analysis);
+                                    if (data.analysis) {
+                                        setCommentsAnalysis(data.analysis);
+                                    }
+                                    setAnalyzingComments(false);
+                                    break;
+
+                                case 'comments_error':
+                                    console.warn('Comments analysis error:', data.message);
+                                    setAnalyzingComments(false);
+                                    // Не показываем ошибку анализа комментариев как критическую
+                                    break;
+
                                 case 'error':
                                     console.error('Received error:', data.message);
                                     setError(data.message || 'Произошла ошибка');
                                     setLoading(false);
+                                    setAnalyzingComments(false);
                                     break;
 
                                 default:
@@ -164,6 +198,9 @@ function LinkForm() {
                             setShowRating(true);
                             setStreamingStatus('Готово!');
                             setLoading(false);
+                        } else if (data.type === 'comments_analysis' && data.analysis) {
+                            setCommentsAnalysis(data.analysis);
+                            setAnalyzingComments(false);
                         }
                     }
                 } catch (e) {
@@ -175,11 +212,16 @@ function LinkForm() {
                 console.log('Stream ended but loading still true, resetting...');
                 setLoading(false);
             }
+            if (analyzingComments) {
+                console.log('Stream ended but analyzingComments still true, resetting...');
+                setAnalyzingComments(false);
+            }
         } catch (err) {
             console.error('Fetch error:', err);
             setError('Ошибка при обработке ссылки. Проверьте URL и попробуйте снова.');
             console.error('Error:', err);
             setLoading(false);
+            setAnalyzingComments(false);
         }
     }
 
@@ -273,22 +315,22 @@ function LinkForm() {
                                 placeholder="https://habr.com/"
                                 onChange={(e) => setLink(e.target.value)}
                                 onKeyPress={(e) => {
-                                    if (e.key === 'Enter' && !loading && link.trim()) {
+                                    if (e.key === 'Enter' && !loading && !analyzingComments && link.trim()) {
                                         handleSubmit();
                                     }
                                 }}
-                                disabled={loading}
+                                disabled={loading || analyzingComments}
                             />
                         </div>
                         <button
                             onClick={handleSubmit}
-                            disabled={loading || !link.trim()}
+                            disabled={loading || analyzingComments || !link.trim()}
                             className="w-full bg-gradient-to-r from-blue-400 to-indigo-400 text-white px-6 py-3 rounded-lg font-medium shadow-md hover:from-blue-600 hover:to-indigo-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? (
+                            {loading || analyzingComments ? (
                                 <div className="flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                                    Обрабатываем...
+                                    {analyzingComments ? 'Анализируем комментарии...' : 'Обрабатываем...'}
                                 </div>
                             ) : (
                                 'Суммаризировать'
@@ -325,16 +367,20 @@ function LinkForm() {
                 )}
 
                 {/* Streaming Status */}
-                {loading && (
+                {(loading || analyzingComments) && (
                     <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-800">Обработка статьи</h3>
-                            <div className="text-sm text-gray-500">
-                                {processedSections.filter(s => s).length} / {totalSections} разделов
-                            </div>
+                            <h3 className="text-lg font-semibold text-gray-800">
+                                {analyzingComments ? 'Анализ комментариев' : 'Обработка статьи'}
+                            </h3>
+                            {!analyzingComments && (
+                                <div className="text-sm text-gray-500">
+                                    {processedSections.filter(s => s).length} / {totalSections} разделов
+                                </div>
+                            )}
                         </div>
 
-                        {totalSections > 0 && (
+                        {totalSections > 0 && !analyzingComments && (
                             <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
                                 <div
                                     className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-300"
@@ -344,7 +390,9 @@ function LinkForm() {
                         )}
 
                         <div className="flex items-center">
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mr-3"></div>
+                            <div className={`animate-spin rounded-full h-5 w-5 border-b-2 mr-3 ${
+                                analyzingComments ? 'border-purple-500' : 'border-blue-500'
+                            }`}></div>
                             <span className="text-gray-700">{streamingStatus || 'Загрузка...'}</span>
                         </div>
                     </div>
@@ -438,6 +486,16 @@ function LinkForm() {
                     </div>
                 )}
 
+                {/* Comments Analysis */}
+                {commentsAnalysis && (
+                    <div className="mb-8">
+                        <CommentsAnalysis 
+                            analysisData={commentsAnalysis}
+                            isLoading={analyzingComments}
+                        />
+                    </div>
+                )}
+
                 {/* Rating Component */}
                 {showRating && summary && (
                     <div className="mb-8">
@@ -452,7 +510,7 @@ function LinkForm() {
                 )}
 
                 {/* Empty state */}
-                {!summary && !loading && processedSections.length === 0 && (
+                {!summary && !loading && !analyzingComments && processedSections.length === 0 && (
                     <div className="text-center py-12">
                         <div className="text-gray-400 mb-4">
                             <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
