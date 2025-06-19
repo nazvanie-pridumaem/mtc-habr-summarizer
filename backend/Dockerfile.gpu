@@ -1,0 +1,35 @@
+# Dockerfile.gpu — с поддержкой CUDA
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+# Установка Python
+RUN apt-get update && apt-get install -y \
+    python3.11 python3.11-dev python3.11-venv python3-pip git curl ca-certificates \
+    && ln -sf python3.11 /usr/bin/python \
+    && ln -sf pip3 /usr/bin/pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+# Установка CUDA-версии PyTorch
+RUN pip install --upgrade pip && \
+    pip install torch==2.2.2+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Установка остальных зависимостей
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Загрузка NLTK-ресурсов
+RUN python download_nltk_resources.py
+
+# Предзагрузка моделей из HuggingFace
+RUN python -c "\
+from transformers import T5ForConditionalGeneration, T5Tokenizer; \
+T5ForConditionalGeneration.from_pretrained('denisnaenko/t5_habr_summarizer'); \
+T5Tokenizer.from_pretrained('denisnaenko/t5_habr_summarizer'); \
+T5ForConditionalGeneration.from_pretrained('ghostbim21/ru_text_summary'); \
+T5Tokenizer.from_pretrained('ghostbim21/ru_text_summary')"
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

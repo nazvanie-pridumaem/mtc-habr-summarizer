@@ -1,0 +1,24 @@
+# Dockerfile.cpu — без поддержки CUDA
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+# Установка зависимостей (CPU-версия PyTorch)
+RUN pip install --upgrade pip && \
+    pip install torch==2.2.2 && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN python download_nltk_resources.py
+
+RUN python -c "\
+from transformers import T5ForConditionalGeneration, T5Tokenizer; \
+T5ForConditionalGeneration.from_pretrained('denisnaenko/t5_habr_summarizer'); \
+T5Tokenizer.from_pretrained('denisnaenko/t5_habr_summarizer'); \
+T5ForConditionalGeneration.from_pretrained('ghostbim21/ru_text_summary'); \
+T5Tokenizer.from_pretrained('ghostbim21/ru_text_summary')"
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

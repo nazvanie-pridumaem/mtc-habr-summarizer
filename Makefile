@@ -1,5 +1,8 @@
-up:
-	docker-compose up --build
+up-gpu:
+	docker-compose up --build frontend backend-gpu
+
+up-cpu:
+	docker-compose up --build frontend backend-cpu
 
 down:
 	docker-compose down
@@ -7,6 +10,10 @@ down:
 logs:
 	docker-compose logs -f
 
-rebuild:
+rebuild-gpu:
 	docker-compose down
-	docker-compose up --build
+	docker-compose up --build frontend backend-gpu
+
+rebuild-cpu:
+	docker-compose down
+	docker-compose up --build frontend backend-cpu

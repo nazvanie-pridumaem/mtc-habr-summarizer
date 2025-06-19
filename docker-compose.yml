@@ -4,12 +4,31 @@ services:
       context: ./frontend
     ports:
       - "3000:80"
-    container_name: mtchabrsummarizer-frontend
+    container_name: frontend
 
-
-  backend:
+  backend-gpu:
     build:
       context: ./backend
+      dockerfile: Dockerfile.gpu
     ports:
       - "8000:8000"
-    container_name: mtchabrsummarizer-backend
+    container_name: backend-gpu
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  backend-cpu:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+    ports:
+      - "8001:8000"
+    container_name: backend-cpu
